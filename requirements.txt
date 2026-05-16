@@ -4,13 +4,15 @@ pydantic
 pydantic-settings
 email-validator
 motor
-beanie
+beanie<2.0
 openai
 sse-starlette
 python-jose[cryptography]
 passlib[bcrypt]
+bcrypt<4.1
 python-multipart
 pdfplumber
+pypdfium2
 python-pptx
 anyio
 pytest
