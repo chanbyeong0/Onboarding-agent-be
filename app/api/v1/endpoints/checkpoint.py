@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.api.deps import get_current_user
 from app.crud import checkpoint as checkpoint_crud
 from app.crud import document as document_crud
+from app.crud import lecture_session as lecture_session_crud
 from app.models.checkpoint import Checkpoint
 from app.models.user import User
 from app.schemas.checkpoint import CheckpointCreate, CheckpointResponse
@@ -29,6 +30,7 @@ def to_checkpoint_response(checkpoint: Checkpoint) -> CheckpointResponse:
         id=str(checkpoint.id),
         user_id=str(checkpoint.user_id),
         document_id=str(checkpoint.document_id),
+        session_id=str(checkpoint.session_id) if checkpoint.session_id else None,
         page_number=checkpoint.page_number,
         content=checkpoint.content,
         created_at=checkpoint.created_at,
@@ -57,6 +59,10 @@ async def create_checkpoint(
     document = await document_crud.get_by_id(checkpoint_in.document_id)
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="문서를 찾을 수 없습니다.")
+    if checkpoint_in.session_id:
+        session = await lecture_session_crud.get_by_id(checkpoint_in.session_id)
+        if session is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="강의 세션을 찾을 수 없습니다.")
 
     try:
         # 현재 사용자 ObjectId와 요청 데이터를 사용해 체크포인트를 저장한다
@@ -79,4 +85,19 @@ async def list_my_checkpoints(current_user: User = Depends(get_current_user)) ->
 
     # 현재 사용자 ObjectId로 MongoDB 체크포인트 목록을 조회한다
     checkpoints = await checkpoint_crud.list_by_user(str(current_user.id))
+    return [to_checkpoint_response(checkpoint) for checkpoint in checkpoints]
+
+
+@router.get("/sessions/{session_id}/me", response_model=list[CheckpointResponse])
+async def list_my_session_checkpoints(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+) -> list[CheckpointResponse]:
+    """현재 사용자의 특정 강의 세션 체크포인트 목록을 조회한다."""
+
+    session = await lecture_session_crud.get_by_id(session_id)
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="강의 세션을 찾을 수 없습니다.")
+
+    checkpoints = await checkpoint_crud.list_by_user_and_session(str(current_user.id), session_id)
     return [to_checkpoint_response(checkpoint) for checkpoint in checkpoints]

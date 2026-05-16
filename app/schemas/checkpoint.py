@@ -12,6 +12,7 @@ class CheckpointCreate(BaseModel):
     """체크포인트 생성 요청 스키마다."""
 
     document_id: str
+    session_id: str | None = None
     page_number: int | None = None
     content: str = Field(min_length=1)
 
@@ -22,6 +23,7 @@ class CheckpointResponse(BaseModel):
     id: str
     user_id: str
     document_id: str
+    session_id: str | None = None
     page_number: int | None
     content: str
     created_at: datetime

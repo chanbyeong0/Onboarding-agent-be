@@ -18,6 +18,7 @@ class Checkpoint(Document):
 
     user_id: PydanticObjectId
     document_id: PydanticObjectId
+    session_id: PydanticObjectId | None = None
     page_number: int | None = None
     content: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
