@@ -5,7 +5,7 @@ main.py는 이 라우터를 /api/v1 prefix 아래에 등록한다.
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import chat, checkpoint, document, users
+from app.api.v1.endpoints import chat, checkpoint, document, lecture_session, users
 
 api_router = APIRouter()
 
@@ -17,6 +17,9 @@ api_router.include_router(document.router)
 
 # 사용자 체크포인트 API를 v1 라우터에 등록한다
 api_router.include_router(checkpoint.router)
+
+# 강의 세션과 학습 현황 API를 v1 라우터에 등록한다
+api_router.include_router(lecture_session.router)
 
 # SSE 채팅 API를 v1 라우터에 등록한다
 api_router.include_router(chat.router)

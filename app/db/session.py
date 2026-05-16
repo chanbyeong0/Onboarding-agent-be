@@ -7,8 +7,13 @@ from beanie import init_beanie
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from app.core.config import settings
+from app.core.seed import ensure_admin_user
+from app.models.chat_message import ChatMessage
 from app.models.checkpoint import Checkpoint
 from app.models.document import DocumentModel
+from app.models.document_page import DocumentPage
+from app.models.lecture_session import LectureSession
+from app.models.page_explanation import PageExplanation
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 
@@ -46,8 +51,9 @@ async def init_db() -> None:
     # Beanie가 인증/문서/체크포인트 컬렉션을 비동기 모델로 사용할 수 있게 등록한다
     await init_beanie(
         database=get_database(),
-        document_models=[User, DocumentModel, Checkpoint, RefreshToken],
+        document_models=[User, DocumentModel, DocumentPage, LectureSession, Checkpoint, ChatMessage, PageExplanation, RefreshToken],
     )
+    await ensure_admin_user()
 
 
 async def close_db() -> None:

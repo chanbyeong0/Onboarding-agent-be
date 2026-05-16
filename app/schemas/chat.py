@@ -12,8 +12,10 @@ class ChatRequest(BaseModel):
     """채팅 요청 스키마다."""
 
     message: str = Field(min_length=1)
-    document_id: str
+    session_id: str | None = None
+    document_id: str | None = None
     page_number: int | None = None
+    mode: Literal["question", "explain_page"] = "question"
     checkpoints: list[str] = Field(default_factory=list)
 
 
