@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    container_name: onboarding-app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - onboarding_net
+
+networks:
+  onboarding_net:
+    external: true
