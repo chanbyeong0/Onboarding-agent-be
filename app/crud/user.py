@@ -55,7 +55,7 @@ async def create(user_in: UserCreate) -> User:
 
     # 평문 비밀번호를 저장 가능한 bcrypt 해시로 변환한다
     hashed_password = hash_password(user_in.password)
-    user = User(email=user_in.email, password=hashed_password, name=user_in.name)
+    user = User(email=user_in.email, password=hashed_password, name=user_in.name, role=user_in.role)
 
     # Beanie insert로 사용자 문서를 users 컬렉션에 저장한다
     return await user.insert()

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_current_user
 from app.core.config import settings
+from app.core.seed import ADMIN_EMAIL
 from app.core.security import create_access_token, create_refresh_token, decode_refresh_token
 from app.crud import refresh_token as refresh_token_crud
 from app.crud import user as user_crud
@@ -29,7 +30,7 @@ def to_user_response(user: User) -> UserResponse:
         UserResponse: 클라이언트에 반환할 사용자 응답.
     """
 
-    return UserResponse(id=str(user.id), email=user.email, name=user.name, created_at=user.created_at)
+    return UserResponse(id=str(user.id), email=user.email, name=user.name, role=user.role, created_at=user.created_at)
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -71,7 +72,8 @@ async def login(login_in: UserLogin) -> Token:
     """
 
     # 이메일과 비밀번호 검증을 사용자 CRUD 계층에 위임한다
-    user = await user_crud.authenticate(login_in.email, login_in.password)
+    email = ADMIN_EMAIL if login_in.email == "admin" else login_in.email
+    user = await user_crud.authenticate(email, login_in.password)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="이메일 또는 비밀번호가 올바르지 않습니다.")
 

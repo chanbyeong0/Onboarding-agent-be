@@ -48,3 +48,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
     if user is None:
         raise credentials_error
     return user
+
+
+async def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
+    """현재 사용자가 관리자 역할인지 확인한다."""
+
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="관리자 권한이 필요합니다.",
+        )
+    return current_user
