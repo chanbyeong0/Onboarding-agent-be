@@ -8,7 +8,7 @@ from beanie import PydanticObjectId
 from app.models.document import DocumentModel
 
 
-async def create(title: str, file_path: str, file_type: str) -> DocumentModel:
+async def create(title: str, file_path: str, file_type: str, viewer_pdf_path: str) -> DocumentModel:
     """문서 메타데이터를 저장한다.
 
     Args:
@@ -20,7 +20,7 @@ async def create(title: str, file_path: str, file_type: str) -> DocumentModel:
         DocumentModel: 저장된 문서 문서 모델.
     """
 
-    document = DocumentModel(title=title, file_path=file_path, file_type=file_type)
+    document = DocumentModel(title=title, file_path=file_path, viewer_pdf_path=viewer_pdf_path, file_type=file_type)
 
     # Beanie insert로 문서 메타데이터를 documents 컬렉션에 저장한다
     return await document.insert()

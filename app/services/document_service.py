@@ -4,16 +4,19 @@ RAG 색인 호출 지점은 TODO로 남겨 두고, 문서 메타데이터는 Mon
 """
 
 from pathlib import Path
+import subprocess
 from typing import Any
 from uuid import uuid4
 
 import anyio
 import pdfplumber
+import pypdfium2 as pdfium
 from fastapi import HTTPException, UploadFile, status
 from pptx import Presentation
 
 from app.core.config import settings
 from app.crud import document as document_crud
+from app.crud import document_page as document_page_crud
 from app.models.document import DocumentModel
 
 SUPPORTED_EXTENSIONS = {"pdf", "ppt", "pptx"}
@@ -132,6 +135,69 @@ async def extract_pages(file_path: Path, file_type: str) -> list[dict[str, Any]]
     return await anyio.to_thread.run_sync(extract_ppt_text, file_path)
 
 
+def convert_office_to_pdf(file_path: Path) -> Path:
+    """LibreOffice headless 모드로 PPT/PPTX를 PDF로 변환한다."""
+
+    output_dir = file_path.parent
+    completed = subprocess.run(
+        [
+            "libreoffice",
+            "--headless",
+            "--convert-to",
+            "pdf",
+            "--outdir",
+            str(output_dir),
+            str(file_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    pdf_path = output_dir / f"{file_path.stem}.pdf"
+    if completed.returncode != 0 or not pdf_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"문서 PDF 변환에 실패했습니다: {completed.stderr or completed.stdout}",
+        )
+    return pdf_path
+
+
+def render_pdf_pages(pdf_path: Path, document_id: str) -> list[dict[str, Any]]:
+    """PDF 페이지를 PNG 이미지로 렌더링한다."""
+
+    page_dir = Path(settings.upload_dir) / "pages" / document_id
+    page_dir.mkdir(parents=True, exist_ok=True)
+    rendered_pages: list[dict[str, Any]] = []
+
+    pdf = pdfium.PdfDocument(pdf_path)
+    try:
+        for index in range(len(pdf)):
+            page_number = index + 1
+            image_path = page_dir / f"{page_number}.png"
+            page = pdf[index]
+            bitmap = page.render(scale=2).to_pil()
+            bitmap.save(image_path)
+            rendered_pages.append({"page_number": page_number, "image_path": str(image_path)})
+    finally:
+        pdf.close()
+    return rendered_pages
+
+
+async def render_document_pages(file_path: Path, file_type: str, document_id: str) -> list[dict[str, Any]]:
+    """문서 유형에 맞게 페이지 이미지를 생성한다."""
+
+    source_pdf = await get_viewer_pdf_path(file_path, file_type)
+    return await anyio.to_thread.run_sync(render_pdf_pages, source_pdf, document_id)
+
+
+async def get_viewer_pdf_path(file_path: Path, file_type: str) -> Path:
+    """프론트 PDF 뷰어가 사용할 PDF 경로를 반환한다."""
+
+    if file_type == "pdf":
+        return file_path
+    return await anyio.to_thread.run_sync(convert_office_to_pdf, file_path)
+
+
 def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> list[str]:
     """텍스트를 겹침 구간이 있는 고정 길이 청크로 분리한다.
 
@@ -216,15 +282,34 @@ async def process_upload(file: UploadFile) -> DocumentModel:
     # 업로드 파일을 디스크에 저장하고 저장 경로를 회수한다
     file_path = await save_upload_file(file)
 
+    # PPT/PPTX는 브라우저 뷰어용 PDF로 변환하고, PDF는 원본을 그대로 사용한다
+    viewer_pdf_path = await get_viewer_pdf_path(file_path, file_type)
+
     # MongoDB(Beanie)에 문서 메타데이터를 저장한다
     document = await document_crud.create(
         title=file.filename,
         file_path=str(file_path),
         file_type=file_type,
+        viewer_pdf_path=str(viewer_pdf_path),
     )
 
     # 파일 유형에 맞는 파서로 페이지(슬라이드) 단위 텍스트를 추출한다
     pages = await extract_pages(file_path, file_type)
+
+    # 브라우저 강의 플레이어에서 사용할 페이지 이미지를 생성한다
+    rendered_pages = await render_document_pages(file_path, file_type, str(document.id))
+    text_by_page = {page["page_number"]: page["text"] for page in pages}
+    await document_page_crud.create_many(
+        str(document.id),
+        [
+            {
+                "page_number": rendered_page["page_number"],
+                "image_path": rendered_page["image_path"],
+                "text": text_by_page.get(rendered_page["page_number"], ""),
+            }
+            for rendered_page in rendered_pages
+        ],
+    )
 
     # 페이지 텍스트를 청크 단위로 잘라 메타데이터를 부착한다
     _chunks = chunk_pages(pages, document_id=str(document.id))

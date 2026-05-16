@@ -15,6 +15,7 @@ class DocumentResponse(BaseModel):
     id: str
     title: str
     file_path: str
+    viewer_pdf_url: str
     file_type: Literal["pdf", "ppt", "pptx"]
     uploaded_at: datetime
 
@@ -25,3 +26,18 @@ class DocumentList(BaseModel):
     """문서 목록 응답 스키마다."""
 
     documents: list[DocumentResponse]
+
+
+class DocumentPageResponse(BaseModel):
+    """문서 페이지 응답 스키마다."""
+
+    document_id: str
+    page_number: int
+    image_url: str
+    text: str
+
+
+class DocumentPageList(BaseModel):
+    """문서 페이지 목록 응답 스키마다."""
+
+    pages: list[DocumentPageResponse]

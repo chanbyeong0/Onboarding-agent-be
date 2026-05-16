@@ -19,6 +19,7 @@ class DocumentModel(Document):
 
     title: str
     file_path: str
+    viewer_pdf_path: str | None = None
     file_type: Literal["pdf", "ppt", "pptx"]
     uploaded_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
