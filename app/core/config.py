@@ -21,6 +21,17 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
     openai_base_url: str | None = Field(default=None, alias="OPENAI_BASE_URL")
+    ncp_tts_api_url: str = Field(
+        default="https://naveropenapi.apigw.ntruss.com/tts-premium/v1/tts",
+        alias="NCP_TTS_API_URL",
+    )
+    ncp_tts_client_id: str = Field(default="", alias="NCP_TTS_CLIENT_ID")
+    ncp_tts_client_secret: str = Field(default="", alias="NCP_TTS_CLIENT_SECRET")
+    ncp_tts_speaker: str = Field(default="vhyeri", alias="NCP_TTS_SPEAKER")
+    ncp_tts_volume: str = Field(default="0", alias="NCP_TTS_VOLUME")
+    ncp_tts_speed: str = Field(default="0", alias="NCP_TTS_SPEED")
+    ncp_tts_pitch: str = Field(default="0", alias="NCP_TTS_PITCH")
+    ncp_tts_format: str = Field(default="mp3", alias="NCP_TTS_FORMAT")
     jwt_secret_key: str = Field(default="change-me", alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     access_token_expire_minutes: int = Field(default=60, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
