@@ -13,6 +13,43 @@ class TTSConfigurationError(RuntimeError):
     """TTS 호출에 필요한 설정이 없을 때 발생한다."""
 
 
+def build_tts_headers() -> dict[str, str]:
+    """ClovaTTS 호출에 필요한 인증 헤더를 생성한다."""
+
+    if not settings.ncp_tts_client_id or not settings.ncp_tts_client_secret:
+        raise TTSConfigurationError("ClovaTTS API 키가 설정되지 않았습니다.")
+    return {
+        "X-NCP-APIGW-API-KEY-ID": settings.ncp_tts_client_id,
+        "X-NCP-APIGW-API-KEY": settings.ncp_tts_client_secret,
+    }
+
+
+def build_tts_payload(text: str) -> dict[str, str]:
+    """ClovaTTS 요청 body를 생성한다."""
+
+    return {
+        "speaker": settings.ncp_tts_speaker,
+        "volume": settings.ncp_tts_volume,
+        "speed": settings.ncp_tts_speed,
+        "pitch": settings.ncp_tts_pitch,
+        "text": strip_markdown(text)[:5000],
+        "format": settings.ncp_tts_format,
+    }
+
+
+async def synthesize_to_bytes(text: str) -> bytes:
+    """ClovaTTS로 텍스트를 mp3 바이트로 변환한다."""
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            settings.ncp_tts_api_url,
+            headers=build_tts_headers(),
+            data=build_tts_payload(text),
+        )
+        response.raise_for_status()
+    return response.content
+
+
 def strip_markdown(text: str) -> str:
     """TTS 전달 전 마크다운 문법 기호를 제거해 자연스러운 음성을 생성한다."""
 
@@ -58,9 +95,6 @@ async def synthesize_to_file(
 ) -> str:
     """ClovaTTS로 텍스트를 mp3 파일로 변환하고 저장 경로를 반환한다."""
 
-    if not settings.ncp_tts_client_id or not settings.ncp_tts_client_secret:
-        raise TTSConfigurationError("ClovaTTS API 키가 설정되지 않았습니다.")
-
     output_path = build_tts_path(
         session_id=session_id,
         document_id=document_id,
@@ -69,22 +103,5 @@ async def synthesize_to_file(
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    headers = {
-        "X-NCP-APIGW-API-KEY-ID": settings.ncp_tts_client_id,
-        "X-NCP-APIGW-API-KEY": settings.ncp_tts_client_secret,
-    }
-    data = {
-        "speaker": settings.ncp_tts_speaker,
-        "volume": settings.ncp_tts_volume,
-        "speed": settings.ncp_tts_speed,
-        "pitch": settings.ncp_tts_pitch,
-        "text": strip_markdown(text)[:5000],
-        "format": settings.ncp_tts_format,
-    }
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(settings.ncp_tts_api_url, headers=headers, data=data)
-        response.raise_for_status()
-
-    await anyio.Path(output_path).write_bytes(response.content)
+    await anyio.Path(output_path).write_bytes(await synthesize_to_bytes(text))
     return str(output_path)
