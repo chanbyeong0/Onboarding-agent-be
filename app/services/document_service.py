@@ -83,14 +83,35 @@ def extract_pdf_text(file_path: Path) -> list[dict[str, Any]]:
     """
 
     pages: list[dict[str, Any]] = []
+    pdfium_text_by_page = extract_pdf_text_with_pdfium(file_path)
 
     # pdfplumber가 PDF 페이지 객체를 열어 텍스트 추출 API를 제공한다
     with pdfplumber.open(file_path) as pdf:
         for index, page in enumerate(pdf.pages, start=1):
             # PDF 페이지에서 텍스트를 추출하고 빈 페이지는 빈 문자열로 정규화한다
-            text = page.extract_text() or ""
+            text = page.extract_text() or pdfium_text_by_page.get(index, "")
             pages.append({"page_number": index, "text": text})
     return pages
+
+
+def extract_pdf_text_with_pdfium(file_path: Path) -> dict[int, str]:
+    """pdfplumber가 놓친 PDF 텍스트 레이어를 pypdfium2로 보완 추출한다."""
+
+    text_by_page: dict[int, str] = {}
+    pdf = pdfium.PdfDocument(file_path)
+    try:
+        for index in range(len(pdf)):
+            page_number = index + 1
+            page = pdf[index]
+            textpage = page.get_textpage()
+            try:
+                text_by_page[page_number] = (textpage.get_text_range() or "").strip()
+            finally:
+                textpage.close()
+                page.close()
+    finally:
+        pdf.close()
+    return text_by_page
 
 
 def extract_ppt_text(file_path: Path) -> list[dict[str, Any]]:

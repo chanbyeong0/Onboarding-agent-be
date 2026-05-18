@@ -21,7 +21,12 @@ os.environ.setdefault("UPLOAD_DIR", "./test_uploads")
 from app.core.security import create_access_token, hash_password  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.checkpoint import Checkpoint  # noqa: E402
+from app.models.chat_message import ChatMessage  # noqa: E402
 from app.models.document import DocumentModel  # noqa: E402
+from app.models.document_page import DocumentPage  # noqa: E402
+from app.models.exam_attempt import ExamAttempt  # noqa: E402
+from app.models.lecture_session import LectureSession  # noqa: E402
+from app.models.page_explanation import PageExplanation  # noqa: E402
 from app.models.refresh_token import RefreshToken  # noqa: E402
 from app.models.user import User  # noqa: E402
 
@@ -40,14 +45,29 @@ async def init_test_database() -> AsyncIterator[None]:
     # Beanie 문서 모델을 테스트 데이터베이스에 등록한다
     await init_beanie(
         database=client["test_onboarding"],
-        document_models=[User, DocumentModel, Checkpoint, RefreshToken],
+        document_models=[
+            User,
+            DocumentModel,
+            DocumentPage,
+            LectureSession,
+            Checkpoint,
+            ChatMessage,
+            PageExplanation,
+            ExamAttempt,
+            RefreshToken,
+        ],
     )
     yield
 
     # 테스트 간 데이터 오염을 막기 위해 Beanie 모델 단위로 컬렉션을 정리한다
     await User.delete_all()
     await DocumentModel.delete_all()
+    await DocumentPage.delete_all()
+    await LectureSession.delete_all()
     await Checkpoint.delete_all()
+    await ChatMessage.delete_all()
+    await PageExplanation.delete_all()
+    await ExamAttempt.delete_all()
     await RefreshToken.delete_all()
 
 

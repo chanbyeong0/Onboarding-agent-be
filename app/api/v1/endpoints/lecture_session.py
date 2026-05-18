@@ -1,6 +1,9 @@
 """lecture_session 엔드포인트는 강의 세션 생성, 조회, 학습 현황 API를 제공한다."""
 
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,12 +13,15 @@ from app.api.deps import get_current_admin, get_current_user
 from app.crud import chat_message as chat_message_crud
 from app.crud import checkpoint as checkpoint_crud
 from app.crud import document as document_crud
+from app.crud import exam_attempt as exam_attempt_crud
 from app.crud import lecture_session as lecture_session_crud
 from app.crud import page_explanation as page_explanation_crud
+from app.models.exam_attempt import ExamAttempt
 from app.models.lecture_session import LectureSession
 from app.models.user import User
 from app.schemas.chat import ChatRequest
 from app.schemas.document import DocumentResponse
+from app.schemas.exam import ExamAnswerResult, ExamAttemptResponse, ExamQuestionResponse, ExamSubmitRequest
 from app.schemas.lecture_session import (
     LearningSummary,
     LectureSessionCreate,
@@ -38,6 +44,39 @@ def to_document_response(document) -> DocumentResponse:
         viewer_pdf_url=f"/api/v1/documents/{document.id}/viewer.pdf",
         file_type=document.file_type,
         uploaded_at=document.uploaded_at,
+    )
+
+
+def to_exam_response(attempt: ExamAttempt, *, include_answers: bool) -> ExamAttemptResponse:
+    """ExamAttempt 문서를 API 응답 스키마로 변환한다."""
+
+    return ExamAttemptResponse(
+        id=str(attempt.id),
+        session_id=str(attempt.session_id),
+        user_id=str(attempt.user_id),
+        questions=[
+            ExamQuestionResponse(
+                question=question.question,
+                options=question.options,
+                correct_option_index=question.correct_option_index if include_answers else None,
+                explanation=question.explanation if include_answers else None,
+                source_hint=question.source_hint,
+            )
+            for question in attempt.questions
+        ],
+        answers=[
+            ExamAnswerResult(
+                question_index=answer.question_index,
+                selected_option_index=answer.selected_option_index,
+                correct_option_index=attempt.questions[answer.question_index].correct_option_index,
+                is_correct=answer.is_correct,
+            )
+            for answer in attempt.answers
+            if 0 <= answer.question_index < len(attempt.questions)
+        ],
+        score=attempt.score,
+        created_at=attempt.created_at,
+        submitted_at=attempt.submitted_at,
     )
 
 
@@ -155,21 +194,23 @@ async def create_page_explanation(
         checkpoints=explanation_in.checkpoints,
     )
     text = cached.text if cached is not None else await agent_service.generate_page_explanation(chat_request)
-    # TODO: TTS 도입 시 아래 주석 해제
-    # audio_path = cached.audio_path if cached is not None else None
-    # try:
-    #     audio_path = await tts_service.synthesize_to_file(
-    #         text=text,
-    #         session_id=session_id,
-    #         document_id=explanation_in.document_id,
-    #         user_id=str(current_user.id),
-    #         page_number=explanation_in.page_number,
-    #     )
-    # except tts_service.TTSConfigurationError:
-    #     audio_path = None
-    # except Exception:
-    #     audio_path = None
-    audio_path = None
+    audio_path = cached.audio_path if cached is not None else None
+    try:
+        logger.info("TTS 생성 시작: session=%s document=%s page=%s", session_id, explanation_in.document_id, explanation_in.page_number)
+        audio_path = await tts_service.synthesize_to_file(
+            text=text,
+            session_id=session_id,
+            document_id=explanation_in.document_id,
+            user_id=str(current_user.id),
+            page_number=explanation_in.page_number,
+        )
+        logger.info("TTS 생성 완료: %s", audio_path)
+    except tts_service.TTSConfigurationError as exc:
+        logger.warning("TTS 설정 오류 (API 키 미설정): %s", exc)
+        audio_path = None
+    except Exception as exc:
+        logger.exception("TTS 생성 실패: %s", exc)
+        audio_path = None
 
     explanation = await page_explanation_crud.upsert(
         session_id=session_id,
@@ -181,6 +222,82 @@ async def create_page_explanation(
     )
     audio_url = f"/api/v1/lecture-sessions/{session_id}/explanations/{explanation.id}/audio" if audio_path else None
     return PageExplanationResponse(text=explanation.text, audio_url=audio_url)
+
+
+@router.post("/{session_id}/exams", response_model=ExamAttemptResponse, status_code=status.HTTP_201_CREATED)
+async def create_exam(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+) -> ExamAttemptResponse:
+    """강의 자료와 사용자의 학습 기록을 기반으로 객관식 시험을 생성한다."""
+
+    session = await lecture_session_crud.get_by_id(session_id)
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="강의 세션을 찾을 수 없습니다.")
+
+    checkpoints = await checkpoint_crud.list_by_user_and_session(str(current_user.id), session_id)
+    chat_messages = await chat_message_crud.list_by_user_and_session(str(current_user.id), session_id)
+    try:
+        questions = await agent_service.generate_exam_questions(
+            document_ids=[str(document_id) for document_id in session.document_ids],
+            checkpoints=[checkpoint.content for checkpoint in checkpoints],
+            chat_messages=[
+                f"질문: {message.message}\n답변: {message.answer or ''}".strip()
+                for message in chat_messages
+            ],
+        )
+    except agent_service.ExamGenerationError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    attempt = await exam_attempt_crud.create(session_id=session_id, user_id=str(current_user.id), questions=questions)
+    return to_exam_response(attempt, include_answers=False)
+
+
+@router.get("/{session_id}/exams/latest", response_model=ExamAttemptResponse | None)
+async def get_latest_exam(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+) -> ExamAttemptResponse | None:
+    """사용자의 특정 강의 세션 최신 시험을 조회한다."""
+
+    session = await lecture_session_crud.get_by_id(session_id)
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="강의 세션을 찾을 수 없습니다.")
+
+    attempt = await exam_attempt_crud.get_latest_by_user_and_session(str(current_user.id), session_id)
+    if attempt is None:
+        return None
+    return to_exam_response(attempt, include_answers=attempt.submitted_at is not None)
+
+
+@router.post("/{session_id}/exams/{exam_id}/submit", response_model=ExamAttemptResponse)
+async def submit_exam(
+    session_id: str,
+    exam_id: str,
+    submit_in: ExamSubmitRequest,
+    current_user: User = Depends(get_current_user),
+) -> ExamAttemptResponse:
+    """객관식 시험 답안을 제출하고 서버에 저장된 정답으로 채점한다."""
+
+    attempt = await exam_attempt_crud.get_by_id(exam_id)
+    if (
+        attempt is None
+        or str(attempt.session_id) != session_id
+        or str(attempt.user_id) != str(current_user.id)
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="시험을 찾을 수 없습니다.")
+    if attempt.submitted_at is not None:
+        return to_exam_response(attempt, include_answers=True)
+
+    selected_answers = {answer.question_index: answer.selected_option_index for answer in submit_in.answers}
+    if set(selected_answers) != set(range(len(attempt.questions))):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="모든 문항에 답해야 합니다.")
+    for question_index, selected_option_index in selected_answers.items():
+        if selected_option_index >= len(attempt.questions[question_index].options):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="선택한 보기 번호가 올바르지 않습니다.")
+
+    submitted = await exam_attempt_crud.submit(attempt, selected_answers)
+    return to_exam_response(submitted, include_answers=True)
 
 
 @router.get("/{session_id}/explanations/{explanation_id}/audio")
@@ -241,6 +358,7 @@ async def delete_session(
     await checkpoint_crud.delete_by_session(session_id)
     await chat_message_crud.delete_by_session(session_id)
     await page_explanation_crud.delete_by_session(session_id)
+    await exam_attempt_crud.delete_by_session(session_id)
     deleted = await lecture_session_crud.delete_by_id(session_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="강의 세션을 찾을 수 없습니다.")

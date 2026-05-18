@@ -5,7 +5,7 @@ main.py는 이 라우터를 /api/v1 prefix 아래에 등록한다.
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import chat, checkpoint, document, lecture_session, users
+from app.api.v1.endpoints import chat, checkpoint, document, lecture_session, stt, users
 
 api_router = APIRouter()
 
@@ -23,3 +23,6 @@ api_router.include_router(lecture_session.router)
 
 # SSE 채팅 API를 v1 라우터에 등록한다
 api_router.include_router(chat.router)
+
+# 브라우저 마이크 PCM을 EPD/STT 서버로 프록시하는 WebSocket API를 등록한다
+api_router.include_router(stt.router)

@@ -1,5 +1,6 @@
 """tts_service 모듈은 ClovaTTS 호출과 생성된 오디오 파일 저장을 담당한다."""
 
+import re
 from pathlib import Path
 
 import anyio
@@ -10,6 +11,35 @@ from app.core.config import settings
 
 class TTSConfigurationError(RuntimeError):
     """TTS 호출에 필요한 설정이 없을 때 발생한다."""
+
+
+def strip_markdown(text: str) -> str:
+    """TTS 전달 전 마크다운 문법 기호를 제거해 자연스러운 음성을 생성한다."""
+
+    # 헤더 (#, ##, ###)
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    # 굵게/기울임 (**, __, *, _)
+    text = re.sub(r"\*{1,3}(.+?)\*{1,3}", r"\1", text)
+    text = re.sub(r"_{1,3}(.+?)_{1,3}", r"\1", text)
+    # 인라인 코드 (`code`)
+    text = re.sub(r"`(.+?)`", r"\1", text)
+    # 코드 블록 (```...```)
+    text = re.sub(r"```[\s\S]*?```", "", text)
+    # 링크 [text](url) → text
+    text = re.sub(r"\[(.+?)\]\(.+?\)", r"\1", text)
+    # 이미지 ![alt](url) 제거
+    text = re.sub(r"!\[.*?\]\(.+?\)", "", text)
+    # 수평선 (---, ***)
+    text = re.sub(r"^[-*]{3,}\s*$", "", text, flags=re.MULTILINE)
+    # 인용 (>)
+    text = re.sub(r"^>\s+", "", text, flags=re.MULTILINE)
+    # 리스트 기호 (-, *, +)
+    text = re.sub(r"^[-*+]\s+", "", text, flags=re.MULTILINE)
+    # 순서 있는 리스트 (1. 2.)
+    text = re.sub(r"^\d+\.\s+", "", text, flags=re.MULTILINE)
+    # 연속 공백/줄바꿈 정리
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
 
 def build_tts_path(*, session_id: str, document_id: str, user_id: str, page_number: int) -> Path:
@@ -48,7 +78,7 @@ async def synthesize_to_file(
         "volume": settings.ncp_tts_volume,
         "speed": settings.ncp_tts_speed,
         "pitch": settings.ncp_tts_pitch,
-        "text": text[:5000],
+        "text": strip_markdown(text)[:5000],
         "format": settings.ncp_tts_format,
     }
 

@@ -1,7 +1,4 @@
-"""
-chat 스키마는 SSE 채팅 요청과 스트림 이벤트 페이로드를 정의한다.
-응답은 고정 JSON이 아니라 text/event-stream 이벤트로 전송된다.
-"""
+"""chat 스키마는 채팅 요청과 응답 페이로드를 정의한다."""
 
 from typing import Literal
 
@@ -25,3 +22,9 @@ class ChatStreamEvent(BaseModel):
     type: Literal["delta", "done", "error"]
     text: str | None = None
     error: str | None = None
+
+
+class ChatResponse(BaseModel):
+    """일반 JSON 채팅 응답 스키마다."""
+
+    answer: str
