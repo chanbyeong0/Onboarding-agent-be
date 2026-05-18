@@ -41,3 +41,10 @@ async def get_by_document_and_page(document_id: str, page_number: int) -> Docume
         DocumentPage.document_id == PydanticObjectId(document_id),
         DocumentPage.page_number == page_number,
     )
+
+
+async def update_text(page: DocumentPage, text: str) -> DocumentPage:
+    """문서 페이지의 추출 텍스트를 갱신한다."""
+
+    page.text = text
+    return await page.save()
