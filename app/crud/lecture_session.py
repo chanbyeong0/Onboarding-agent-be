@@ -12,6 +12,8 @@ async def create(session_in: LectureSessionCreate, created_by: str) -> LectureSe
     session = LectureSession(
         title=session_in.title,
         description=session_in.description,
+        category=session_in.category,
+        level=session_in.level,
         document_ids=[PydanticObjectId(document_id) for document_id in session_in.document_ids],
         created_by=PydanticObjectId(created_by),
     )

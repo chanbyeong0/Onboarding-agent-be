@@ -12,6 +12,8 @@ from app.schemas.lecture_session import (
     LectureSessionCreate,
     LectureSessionList,
     LectureSessionResponse,
+    ProgressUpdateRequest,
+    SessionProgressResponse,
 )
 from app.schemas.page_explanation import PageExplanationRequest, PageExplanationResponse
 from app.services import agent_service, exam_service, lecture_session_service
@@ -47,6 +49,31 @@ async def get_learning_summary(current_user: User = Depends(get_current_user)) -
     """신입 대시보드용 학습 진행률 요약을 반환한다."""
 
     return await lecture_session_service.get_learning_summary(str(current_user.id))
+
+
+@router.patch("/{session_id}/progress", response_model=SessionProgressResponse)
+async def update_learning_progress(
+    session_id: str,
+    progress_in: ProgressUpdateRequest,
+    current_user: User = Depends(get_current_user),
+) -> SessionProgressResponse:
+    """사용자의 특정 강의 세션 페이지 열람 진행도를 갱신한다."""
+
+    try:
+        PydanticObjectId(session_id)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="강의 세션 ID가 올바르지 않습니다.") from exc
+
+    try:
+        return await lecture_session_service.update_learning_progress(
+            session_id=session_id,
+            user_id=str(current_user.id),
+            progress_in=progress_in,
+        )
+    except lecture_session_service.LectureSessionRequestError as exc:
+        detail = str(exc)
+        status_code = status.HTTP_404_NOT_FOUND if "찾을 수 없습니다" in detail else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
 @router.post("/{session_id}/explanations", response_model=PageExplanationResponse)
@@ -166,7 +193,7 @@ async def get_session(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="강의 세션 ID가 올바르지 않습니다.") from exc
 
     try:
-        return await lecture_session_service.get_session_response(session_id)
+        return await lecture_session_service.get_session_response(session_id, user_id=str(current_user.id))
     except lecture_session_service.LectureSessionRequestError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
