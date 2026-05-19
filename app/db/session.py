@@ -16,6 +16,7 @@ from app.models.exam_attempt import ExamAttempt
 from app.models.lecture_session import LectureSession
 from app.models.page_explanation import PageExplanation
 from app.models.refresh_token import RefreshToken
+from app.models.user_learning_progress import UserLearningProgress
 from app.models.user import User
 
 mongo_client: AsyncIOMotorClient | None = None
@@ -62,6 +63,7 @@ async def init_db() -> None:
             PageExplanation,
             ExamAttempt,
             RefreshToken,
+            UserLearningProgress,
         ],
     )
     await ensure_admin_user()

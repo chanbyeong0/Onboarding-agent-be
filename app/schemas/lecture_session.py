@@ -12,7 +12,30 @@ class LectureSessionCreate(BaseModel):
 
     title: str = Field(min_length=1)
     description: str | None = None
+    category: str = "개발"
+    level: str = "입문"
     document_ids: list[str] = Field(default_factory=list)
+
+
+class ProgressUpdateRequest(BaseModel):
+    """사용자가 열람한 강의 페이지 진행도 갱신 요청이다."""
+
+    document_id: str
+    page_number: int = Field(ge=1)
+    total_pages: int = Field(ge=1)
+    study_seconds_delta: int = Field(default=0, ge=0)
+
+
+class SessionProgressResponse(BaseModel):
+    """강의 세션 단위 사용자 학습 진행도 응답이다."""
+
+    completed_pages: int = 0
+    total_pages: int = 0
+    progress_rate: float = 0.0
+    study_seconds: int = 0
+    last_document_id: str | None = None
+    last_page_number: int | None = None
+    completed_at: datetime | None = None
 
 
 class LectureSessionResponse(BaseModel):
@@ -21,10 +44,13 @@ class LectureSessionResponse(BaseModel):
     id: str
     title: str
     description: str | None
+    category: str = "개발"
+    level: str = "입문"
     document_ids: list[str]
     documents: list[DocumentResponse] = Field(default_factory=list)
     created_by: str
     created_at: datetime
+    progress: SessionProgressResponse | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -43,4 +69,5 @@ class LearningSummary(BaseModel):
     completion_rate: float
     checkpoint_count: int
     question_count: int
+    study_seconds: int = 0
     sessions: list[LectureSessionResponse]

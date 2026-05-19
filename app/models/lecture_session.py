@@ -11,6 +11,8 @@ class LectureSession(Document):
 
     title: str
     description: str | None = None
+    category: str = "개발"
+    level: str = "입문"
     document_ids: list[PydanticObjectId] = Field(default_factory=list)
     created_by: PydanticObjectId
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

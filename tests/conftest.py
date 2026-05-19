@@ -28,6 +28,7 @@ from app.models.exam_attempt import ExamAttempt  # noqa: E402
 from app.models.lecture_session import LectureSession  # noqa: E402
 from app.models.page_explanation import PageExplanation  # noqa: E402
 from app.models.refresh_token import RefreshToken  # noqa: E402
+from app.models.user_learning_progress import UserLearningProgress  # noqa: E402
 from app.models.user import User  # noqa: E402
 
 
@@ -55,6 +56,7 @@ async def init_test_database() -> AsyncIterator[None]:
             PageExplanation,
             ExamAttempt,
             RefreshToken,
+            UserLearningProgress,
         ],
     )
     yield
@@ -69,6 +71,7 @@ async def init_test_database() -> AsyncIterator[None]:
     await PageExplanation.delete_all()
     await ExamAttempt.delete_all()
     await RefreshToken.delete_all()
+    await UserLearningProgress.delete_all()
 
 
 @pytest_asyncio.fixture
